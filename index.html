@@ -23,6 +23,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="assets/favicon-lufusound.png" href="/favicon.ico">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
@@ -453,7 +454,17 @@ body{
 }
 @media (max-width:600px) and (min-height:600px){
   body{padding:0}
-  .ipod-widget{transform:scale(min(calc(100vw / 330), calc(100vh / 478)))}
+  .ipod-widget{max-width:none;width:100vw}
+  .ipod{
+    width:min(100vw, 480px);
+    height:100vh;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+  }
+  .screen{flex:1;display:flex;flex-direction:column;min-height:0}
+  .screen__display{flex:1;display:flex;flex-direction:column;min-height:0}
+  .screen__body{flex:1;height:auto;min-height:0}
 }
 </style>
 </head>
