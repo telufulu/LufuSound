@@ -1,0 +1,1714 @@
+<!--
+  PROJECT STRUCTURE (single-file build; sections listed in load order)
+  ----------------------------------------------------------------
+  1. <head>            → Meta tags, title
+  2. <style>
+       - Design tokens   → :root custom properties (radius, spacing, type, motion)
+       - Theme / skins    → body[data-skin="..."] color tokens per skin
+       - Reset / base     → Global resets, body defaults
+       - Layout           → .ipod-widget, .ipod, wheel zone structural rules
+       - Components       → screen, player, menu, wheel, toast, setup-panel
+       - Media queries    → grouped at the bottom of the stylesheet
+  3. <body>            → Semantic markup, data-i18n-* hooks, no inline styles
+  4. <script>
+       - CONFIG           → All configurable constants (storage keys, timings, data)
+       - STRINGS          → Translation dictionary (English default, Spanish)
+       - Utility functions → Pure helpers (formatting, storage, translation)
+       - Builder functions → DOM-building functions (menus, lists)
+       - Render functions  → View state rendering (player, menu, translations)
+       - Spotify functions → PKCE auth + Web API integration
+       - Event handlers    → addEventListener bindings
+       - Initialization    → init() called at the bottom
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>iPod · CS-42</title>
+<style>
+
+/* ============================================================
+   SECTION: Design tokens (structural)
+   Colors are theme-dependent and live in the skin blocks below;
+   structural tokens (radius, spacing, type, motion) live here.
+   ============================================================ */
+:root{
+  color-scheme:light dark;
+  --radius-shell:34px;
+  --radius-bezel:14px;
+  --radius-display:8px;
+  --radius-control:10px;
+  --spacing-xs:4px;
+  --spacing-sm:8px;
+  --spacing-md:12px;
+  --spacing-lg:16px;
+  --spacing-xl:24px;
+  --font-size-xs:9px;
+  --font-size-sm:10px;
+  --font-size-base:12px;
+  --font-size-md:13px;
+  --font-size-lg:15px;
+  --transition-theme:background .35s ease;
+  --transition-progress:width .8s linear;
+  --scroll-duration:9s;
+  /* Shell texture is opt-in per skin. Skins that do not set
+     --shell-texture keep this "none" default and show only the
+     gradient, so the feature works for any skin, not just one. */
+  --shell-texture:none;
+  --shell-texture-blend:normal;
+  /* Screen decoration tint is opt-in per skin too, so the same
+     decoration slot reads correctly on both light and dark screens. */
+  --decoration-ink:rgba(0,0,0,.12);
+}
+
+/* ============================================================
+   SECTION: Theme / skins
+   Each skin redefines only color tokens (and optionally a shell
+   texture and/or a screen decoration). To add a skin, duplicate a
+   body[data-skin="..."] block and register it in CONFIG.skins.
+   ============================================================ */
+body[data-skin="sunset-pop"]{
+  --shell-hi:#ffe9dc; --shell:#ffd3c2; --shell-lo:#f2a892;
+  --ink:#6b3a46; --ink-2:#b57c88;
+  --accent:#f2789f; --accent-2:#ffb27a;
+  --bezel:#2b1a21;
+  --screen:#301c29; --screen-2:#20121b;
+  --scr-ink:#ffd9e6; --scr-sub:#d791ab;
+  --bar-track:#4a2c3b;
+  --wheel-hi:#fff6f0; --wheel:#ffe8dd; --wheel-edge:#e0a894;
+  --wheel-ink:#c95f88;
+  --center-hi:#ffd0bc; --center:#ffb89e;
+}
+body[data-skin="riviera"]{
+  --shell-hi:#eef9ff; --shell:#cbe7f3; --shell-lo:#96c4d8;
+  --ink:#2c4a58; --ink-2:#6f8e9d;
+  --accent:#e0a83c; --accent-2:#8fd3e8;
+  --bezel:#132831;
+  --screen:#123039; --screen-2:#0b2028;
+  --scr-ink:#ffe6ae; --scr-sub:#8fc6d8;
+  --bar-track:#28505c;
+  --wheel-hi:#fbf2dc; --wheel:#f3e4c2; --wheel-edge:#c4ab77;
+  --wheel-ink:#a97e2a;
+  --center-hi:#bfe4f2; --center:#9fd2e6;
+}
+body[data-skin="gold-noir"]{
+  --shell-hi:#45454b; --shell:#26262b; --shell-lo:#101013;
+  --ink:#e9e6de; --ink-2:#8f8c84;
+  --accent:#e6b93f; --accent-2:#f6d878;
+  --bezel:#000000;
+  --screen:#0c0c0e; --screen-2:#050506;
+  --scr-ink:#f6d878; --scr-sub:#9a8a55;
+  --bar-track:#2c2c30;
+  --wheel-hi:#232327; --wheel:#1a1a1e; --wheel-edge:#000000;
+  --wheel-ink:#e6b93f;
+  --center-hi:#3a3a40; --center:#28282d;
+}
+body[data-skin="classic"]{
+  --shell-hi:#ffffff; --shell:#f5f5f3; --shell-lo:#d9d9d5;
+  --ink:#55555a; --ink-2:#9a9a96;
+  --accent:#3f8fdd; --accent-2:#7ab8ec;
+  --bezel:#1e1e20;
+  --screen:#cfd7cb; --screen-2:#b4bfae;
+  --scr-ink:#232822; --scr-sub:#5a6557;
+  --bar-track:#9aa695;
+  --wheel-hi:#ffffff; --wheel:#ececea; --wheel-edge:#c8c8c4;
+  --wheel-ink:#8e8e93;
+  --center-hi:#fafafa; --center:#e3e3e1;
+}
+body[data-skin="marvin"]{
+  --shell-hi:#8b5cf6; --shell:#a855f7; --shell-lo:#d946ef;
+  --ink:#f5f3ff; --ink-2:#eeD5ff;
+  --accent:#e879f9; --accent-2:#8b5cf6;
+  --bezel:#0f0620;
+  --screen:#1b0f2e; --screen-2:#120821;
+  --scr-ink:#f0abfc; --scr-sub:#a78bfa;
+  --bar-track:#33204f;
+  --wheel-hi:#2a1643; --wheel:#1c0d31; --wheel-edge:#0d0618;
+  --wheel-ink:#e879f9;
+  --center-hi:#3a1e5c; --center:#281240;
+  --decoration-ink:rgba(240,171,252,.20);
+  font-family:"Menlo","Consolas","Courier New",monospace;
+}
+/* ---------- SKIN STEEL · «Brushed Steel» (example texture skin) ----------
+   Demonstrates the generalized --shell-texture / --shell-texture-blend
+   tokens: any skin can opt into a texture by setting these two properties,
+   no CSS or JS structure changes needed.
+   The texture is a self-contained inline SVG noise pattern (data URI), not
+   an external image URL. Notion's embedded-HTML sandbox can block image
+   requests to third-party domains, so external texture links may silently
+   fail to render; a data URI has no network dependency and always works. */
+body[data-skin="steel"]{
+  --shell-hi:#d8dadc; --shell:#b0b4b8; --shell-lo:#7d8186;
+  --ink:#3a3d40; --ink-2:#83878b;
+  --accent:#4fa8e8; --accent-2:#9fd0f2;
+  --bezel:#101113;
+  --screen:#141518; --screen-2:#0a0b0c;
+  --scr-ink:#eef3f7; --scr-sub:#8b95a0;
+  --bar-track:#2a2d31;
+  --wheel-hi:#f2f3f4; --wheel:#dcdedf; --wheel-edge:#aeb2b6;
+  --wheel-ink:#4a4e52;
+  --center-hi:#e7e9ea; --center:#c7cace;
+  --shell-texture:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27300%27%20height%3D%27300%27%3E%3Cfilter%20id%3D%27n%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%270.002%200.9%27%20numOctaves%3D%272%27%20seed%3D%273%27%20result%3D%27t%27%2F%3E%3CfeColorMatrix%20in%3D%27t%27%20type%3D%27matrix%27%20values%3D%270%200%200%200%200.65%20%200%200%200%200%200.67%20%200%200%200%200%200.69%20%200%200%200%200.4%200%27%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27%23b0b4b8%27%2F%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20filter%3D%27url%28%23n%29%27%2F%3E%3C%2Fsvg%3E");
+  --shell-texture-blend:soft-light;
+}
+/* ---------- SKIN MAESTRO · light wood, modern classical-music look ----------
+   Wood grain is a self-contained inline SVG noise pattern (data URI); see
+   the note on the Steel skin above for why this avoids external images.
+   The screen uses a beige "sheet music paper" tone with dark ink text and
+   a burgundy/gold accent pairing for a classical-but-contemporary feel.
+   The screen bezel uses a warm gold tone instead of the usual dark/black
+   bezel, evoking an ornate picture-frame / brass finish. */
+body[data-skin="maestro"]{
+  --shell-hi:#f5ecd9; --shell:#ecdfc2; --shell-lo:#d9c79e;
+  --ink:#4a3f2c; --ink-2:#8a7d64;
+  --accent:#8b3a3a; --accent-2:#c9a15a;
+  --bezel:#a9822f;
+  --screen:#f2ead9; --screen-2:#e8dcc0;
+  --scr-ink:#3b3226; --scr-sub:#8a7d64;
+  --bar-track:#d8c9a3;
+  --wheel-hi:#f7f1e3; --wheel:#ecdfc2; --wheel-edge:#c9b98c;
+  --wheel-ink:#5a4b34;
+  --center-hi:#f2e9d4; --center:#e3d3a8;
+  --decoration-ink:rgba(74,63,44,.28);
+  --shell-texture:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27300%27%20height%3D%27300%27%3E%3Cfilter%20id%3D%27n%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%270.006%200.3%27%20numOctaves%3D%274%27%20seed%3D%277%27%20result%3D%27t%27%2F%3E%3CfeColorMatrix%20in%3D%27t%27%20type%3D%27matrix%27%20values%3D%270%200%200%200%200.32%20%200%200%200%200%200.2%20%200%200%200%200%200.09%20%200%200%200%200.6%200%27%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27%23cbb385%27%2F%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20filter%3D%27url%28%23n%29%27%2F%3E%3C%2Fsvg%3E");
+  --shell-texture-blend:normal;
+}
+
+/* ============================================================
+   SECTION: Reset / base
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:transparent}
+@media (prefers-color-scheme: dark){
+  html,body{background:#191919}
+}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:transparent;
+  color:var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:var(--spacing-xl) var(--spacing-lg);
+}
+
+/* ============================================================
+   SECTION: Layout
+   ============================================================ */
+.ipod-widget{position:relative;width:100%;max-width:330px}
+.ipod{
+  position:relative;
+  border-radius:var(--radius-shell);
+  background-color:var(--shell);
+  background-image:var(--shell-texture), linear-gradient(160deg,var(--shell-hi) 0%,var(--shell) 55%,var(--shell-lo) 100%);
+  background-size:cover, auto;
+  background-position:center, center;
+  background-repeat:no-repeat, no-repeat;
+  background-blend-mode:var(--shell-texture-blend), normal;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.55),
+    inset 0 -5px 10px rgba(0,0,0,.22),
+    inset 3px 0 6px rgba(255,255,255,.18),
+    inset -3px 0 6px rgba(0,0,0,.12),
+    0 2px 4px rgba(0,0,0,.12),
+    0 26px 50px rgba(0,0,0,.30);
+  border:1px solid rgba(0,0,0,.22);
+  padding:26px 20px 30px;
+  transition:var(--transition-theme);
+}
+.ipod::after{
+  content:"";position:absolute;inset:0;border-radius:var(--radius-shell);pointer-events:none;
+  background:linear-gradient(100deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.06) 18%,transparent 30%);
+}
+.wheel{display:flex;justify-content:center;margin-top:14px}
+
+/* ============================================================
+   SECTION: Components — Screen
+   ============================================================ */
+.screen{
+  border-radius:var(--radius-bezel);
+  background:var(--bezel);
+  padding:9px;
+  box-shadow:inset 0 3px 8px rgba(0,0,0,.65), inset 0 -1px 0 rgba(255,255,255,.1), 0 1px 0 rgba(255,255,255,.35);
+  position:relative;
+}
+.screen__display{
+  border-radius:var(--radius-display);
+  background:linear-gradient(180deg,var(--screen) 0%,var(--screen-2) 100%);
+  overflow:hidden;
+  position:relative;
+}
+.screen__display::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,rgba(255,255,255,.12) 0%,rgba(255,255,255,.03) 30%,transparent 45%);
+}
+.screen__statusbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 10px;
+  background:rgba(255,255,255,.07);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  font-size:var(--font-size-sm);font-weight:700;letter-spacing:.08em;
+  color:var(--scr-ink);
+}
+.screen__state-icon{font-size:var(--font-size-xs);min-width:14px}
+.screen__battery{display:flex;align-items:center;gap:2px}
+.screen__battery-cell{width:18px;height:9px;border:1px solid var(--scr-sub);border-radius:2px;position:relative;overflow:hidden}
+.screen__battery-cell::before{content:"";position:absolute;inset:1px;right:30%;background:var(--accent);border-radius:1px}
+.screen__battery::after{content:"";width:2px;height:5px;background:var(--scr-sub);border-radius:0 1px 1px 0}
+.screen__body{position:relative;height:200px}
+.screen__decoration{
+  position:absolute;top:12px;right:10px;z-index:0;display:none;
+  pointer-events:none;user-select:none;
+  color:var(--decoration-ink);
+}
+/* Decoration content is always an inline SVG (see CONFIG.skins[].decoration).
+   Visibility is data-driven: toggled by applyScreenDecoration() based on
+   whether the active skin defines that field. */
+.screen__decoration--visible{display:block}
+.screen__decoration svg{width:34px;height:auto;display:block}
+
+/* ============================================================
+   SECTION: Components — Player view
+   ============================================================ */
+.player{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:center;height:100%}
+.player__now-playing{display:flex;align-items:center;gap:var(--spacing-md);padding:var(--spacing-md) var(--spacing-md) var(--spacing-sm)}
+.player__art-frame{
+  width:100px;height:100px;border-radius:6px;flex:none;
+  background:rgba(0,0,0,.5);padding:3px;
+  box-shadow:0 2px 6px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.player__art{width:100%;height:100%;border-radius:4px;object-fit:cover;display:block;background:#333}
+.player__track{min-width:0;flex:1}
+.player__title-clip{overflow:hidden;white-space:nowrap}
+.player__title{
+  display:inline-block;white-space:nowrap;
+  font-weight:700;font-size:var(--font-size-lg);color:var(--scr-ink);
+}
+.player__title--scrolling{animation:player-marquee var(--scroll-duration) linear infinite}
+@keyframes player-marquee{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(var(--shift,-40%))}}
+.player__subtitle{font-size:var(--font-size-base);color:var(--scr-sub);margin-top:var(--spacing-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player__counter{font-size:var(--font-size-sm);letter-spacing:.1em;color:var(--scr-sub);margin-top:var(--spacing-sm);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player__progress{display:flex;align-items:center;gap:var(--spacing-sm);padding:0 var(--spacing-md);font-size:var(--font-size-sm);color:var(--scr-sub);font-family:"Menlo","Consolas",monospace}
+.player__progress-track{flex:1;height:7px;border-radius:4px;background:var(--bar-track);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.player__progress-fill{height:100%;width:0%;border-radius:4px;
+  background:linear-gradient(90deg,var(--accent-2),var(--accent));
+  transition:var(--transition-progress)}
+
+/* ============================================================
+   SECTION: Components — Menu view
+   ============================================================ */
+.menu{display:none;position:relative;z-index:1;height:100%;overflow-y:auto;padding:6px var(--spacing-sm) 10px}
+.menu__list{list-style:none}
+.menu__item{
+  display:flex;align-items:center;justify-content:space-between;gap:var(--spacing-sm);
+  width:100%;background:none;border:none;cursor:pointer;text-align:left;
+  font:inherit;font-size:var(--font-size-md);font-weight:600;color:var(--scr-ink);
+  padding:7px 10px;border-radius:6px;min-height:32px;
+  -webkit-tap-highlight-color:transparent;
+}
+.menu__item-label{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.menu__item-chevron{flex:none;color:var(--scr-sub);font-size:var(--font-size-base)}
+.menu__item--selected{background:linear-gradient(90deg,var(--accent-2),var(--accent));color:#fff}
+.menu__item--selected .menu__item-chevron{color:rgba(255,255,255,.85)}
+.menu__item:focus-visible{outline:2px solid #2783de;outline-offset:1px}
+.menu__empty{font-size:10.5px;line-height:1.5;color:var(--scr-sub);padding:6px 10px 2px;display:none}
+
+/* ============================================================
+   SECTION: Components — Toast
+   ============================================================ */
+.toast{
+  position:absolute;left:var(--spacing-sm);right:var(--spacing-sm);bottom:6px;z-index:6;display:none;
+  background:rgba(0,0,0,.8);color:#fff;font-size:10.5px;line-height:1.4;
+  padding:6px 9px;border-radius:6px;
+}
+.toast--visible{display:block}
+
+/* ============================================================
+   SECTION: Components — Click wheel
+   ============================================================ */
+.wheel__dial{
+  position:relative;width:140px;height:140px;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,var(--wheel-hi) 0%,var(--wheel) 70%);
+  box-shadow:
+    inset 0 2px 3px rgba(255,255,255,.6),
+    inset 0 -3px 6px rgba(0,0,0,.18),
+    0 1px 0 rgba(255,255,255,.5),
+    0 4px 10px rgba(0,0,0,.18);
+  border:1px solid var(--wheel-edge);
+}
+.wheel__button{
+  position:absolute;background:none;border:none;cursor:pointer;
+  color:var(--wheel-ink);font-family:inherit;
+  width:44px;height:28px;display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;
+  border-radius:var(--radius-control);
+}
+.wheel__button:active{transform:scale(.92)}
+.wheel__button:focus-visible{outline:3px solid #2783de;outline-offset:2px}
+.wheel__button svg{width:15px;height:15px;fill:currentColor}
+.wheel__button-label{font-size:8px;font-weight:800;letter-spacing:.18em}
+.wheel__button--menu{top:3px;left:50%;transform:translateX(-50%)}
+.wheel__button--menu:active{transform:translateX(-50%) scale(.92)}
+.wheel__button--prev{left:1px;top:50%;transform:translateY(-50%)}
+.wheel__button--prev:active{transform:translateY(-50%) scale(.92)}
+.wheel__button--next{right:1px;top:50%;transform:translateY(-50%)}
+.wheel__button--next:active{transform:translateY(-50%) scale(.92)}
+.wheel__button--play{bottom:3px;left:50%;transform:translateX(-50%)}
+.wheel__button--play:active{transform:translateX(-50%) scale(.92)}
+.wheel__center{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:52px;height:52px;border-radius:50%;cursor:pointer;
+  background:radial-gradient(circle at 50% 35%,var(--center-hi),var(--center));
+  border:1px solid rgba(0,0,0,.2);
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.18), inset 0 -1px 0 rgba(255,255,255,.4), 0 1px 2px rgba(0,0,0,.15);
+  -webkit-tap-highlight-color:transparent;
+}
+.wheel__center:active{box-shadow:inset 0 3px 6px rgba(0,0,0,.3)}
+.wheel__center:focus-visible{outline:3px solid #2783de;outline-offset:2px}
+
+/* ============================================================
+   SECTION: Components — Credit line
+   ============================================================ */
+.ipod__credit{
+  text-align:center;margin-top:14px;
+  font-size:var(--font-size-xs);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);font-weight:600;
+}
+.ipod__credit-link{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
+.ipod__credit-link:hover,.ipod__credit-link:focus-visible{color:var(--accent)}
+
+/* ============================================================
+   SECTION: Components — Setup panel (Spotify connection)
+   ============================================================ */
+.setup-panel{
+  position:absolute;inset:0;border-radius:var(--radius-shell);display:none;flex-direction:column;
+  background:#1c1b19;color:#f2f0ec;
+  box-shadow:0 18px 40px rgba(0,0,0,.35);
+  overflow:hidden;z-index:20;
+}
+.setup-panel--open{display:flex}
+.setup-panel__header{display:flex;align-items:center;justify-content:space-between;padding:var(--spacing-lg) 18px var(--spacing-md);border-bottom:1px solid rgba(255,255,255,.14)}
+.setup-panel__title{font-size:var(--font-size-md);letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.setup-panel__close{background:none;border:1px solid rgba(255,255,255,.25);color:#f2f0ec;border-radius:var(--radius-control);
+  width:44px;height:32px;font-size:var(--font-size-base);cursor:pointer}
+.setup-panel__close:hover{background:rgba(255,255,255,.1)}
+.setup-panel__body{flex:1;overflow-y:auto;padding:14px var(--spacing-lg) 18px}
+.setup-panel__heading{font-size:16px;font-weight:700;margin-bottom:var(--spacing-xs)}
+.setup-panel__lead{font-size:var(--font-size-base);color:rgba(255,255,255,.6);margin-bottom:14px;line-height:1.5}
+.setup-panel__step{border:1px solid rgba(255,255,255,.16);border-radius:var(--radius-control);padding:var(--spacing-md) 14px;margin-bottom:10px}
+.setup-panel__step-number{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
+  background:#1db954;color:#fff;font-size:11px;font-weight:700;margin-right:var(--spacing-sm)}
+.setup-panel__step-title{display:flex;align-items:center;font-size:var(--font-size-md);margin-bottom:var(--spacing-sm)}
+.setup-panel__step p,.setup-panel__step li{font-size:var(--font-size-base);line-height:1.55;color:rgba(255,255,255,.78)}
+.setup-panel__step ol{padding-left:20px;display:grid;gap:var(--spacing-xs)}
+.setup-panel__code{font-family:"Menlo","Consolas",monospace;font-size:11px;background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;word-break:break-all}
+.setup-panel__step a{color:#8fc2f2}
+.setup-panel__field{display:flex;gap:var(--spacing-sm);margin-top:var(--spacing-sm)}
+.setup-panel__input{
+  flex:1;min-width:0;border-radius:var(--radius-control);border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.08);color:#fff;padding:10px var(--spacing-md);font-size:var(--font-size-md);font-family:inherit}
+.setup-panel__input::placeholder{color:rgba(255,255,255,.35)}
+.setup-panel__button{
+  border:none;border-radius:var(--radius-control);padding:10px 14px;font-size:var(--font-size-md);font-weight:600;cursor:pointer;
+  background:#1db954;color:#fff;font-family:inherit;min-height:40px}
+.setup-panel__button:hover{filter:brightness(1.08)}
+.setup-panel__button:disabled{opacity:.45;cursor:default}
+.setup-panel__error{display:none;margin-top:10px;font-size:var(--font-size-base);line-height:1.5;color:#f3a9a1;background:rgba(229,100,88,.14);
+  border:1px solid rgba(229,100,88,.4);border-radius:var(--radius-control);padding:var(--spacing-sm) var(--spacing-md)}
+.setup-panel__error--visible{display:block}
+.setup-panel__note{font-size:11px;color:rgba(255,255,255,.5);line-height:1.5;margin-top:var(--spacing-md)}
+
+/* ============================================================
+   SECTION: Media queries (grouped)
+   ============================================================ */
+@media (prefers-reduced-motion:reduce){
+  .player__title--scrolling{animation:none}
+}
+@media (max-width:360px){
+  body{padding:var(--spacing-lg) 10px}
+  .ipod{padding:20px 14px 22px}
+  .wheel__dial{width:126px;height:126px}
+  .wheel__center{width:46px;height:46px}
+}
+@media (max-width:300px){
+  .player__art-frame{display:none}
+  .player__now-playing{padding:var(--spacing-md) var(--spacing-md) var(--spacing-sm)}
+  .player__title{font-size:14px}
+  .screen__decoration{right:5px}
+  .screen__decoration svg{width:26px}
+  .screen__body{height:180px}
+}
+@media (max-width:240px){
+  body{padding:10px 6px}
+  .ipod{padding:14px 10px 16px;border-radius:24px}
+  .ipod::after{border-radius:24px}
+  .screen__decoration{display:none!important}
+  .screen__body{height:160px}
+  .player__title{font-size:var(--font-size-md)}
+  .player__subtitle{font-size:11px}
+  .menu__item{font-size:var(--font-size-base);min-height:28px}
+  .wheel__dial{width:104px;height:104px}
+  .wheel__center{width:38px;height:38px}
+  .wheel__button{width:36px;height:24px}
+  .wheel__button svg{width:12px;height:12px}
+  .wheel__button-label{font-size:8px}
+  .ipod__credit{font-size:8px;letter-spacing:.1em}
+}
+</style>
+</head>
+<body data-skin="sunset-pop">
+<div class="ipod-widget">
+  <div class="ipod">
+
+    <div class="screen">
+      <div class="screen__display">
+        <div class="screen__statusbar">
+          <span id="playbackStateIcon" class="screen__state-icon">&#9658;</span>
+          <span id="statusBarTitle"></span>
+          <span class="screen__battery" aria-hidden="true"><span class="screen__battery-cell"></span></span>
+        </div>
+        <div class="screen__body">
+          <div id="screenDecoration" class="screen__decoration" aria-hidden="true"></div>
+          <div id="playerView" class="player">
+            <div class="player__now-playing">
+              <div class="player__art-frame"><img id="albumArt" class="player__art" data-i18n-alt="artAlt" src=""></div>
+              <div class="player__track">
+                <div class="player__title-clip"><span id="trackTitle" class="player__title"></span></div>
+                <div id="trackSubtitle" class="player__subtitle"></div>
+                <div id="trackCounter" class="player__counter"></div>
+              </div>
+            </div>
+            <div class="player__progress">
+              <span id="currentTimeLabel">--:--</span>
+              <div class="player__progress-track"><div id="progressFill" class="player__progress-fill"></div></div>
+              <span id="totalTimeLabel">--:--</span>
+            </div>
+          </div>
+          <div id="menuView" class="menu" role="menu" data-i18n-aria-label="menuAriaLabel">
+            <div class="menu__empty" id="menuEmptyMessage"></div>
+            <ul class="menu__list" id="menuItemList"></ul>
+          </div>
+        </div>
+        <div id="toast" class="toast" role="status"></div>
+      </div>
+    </div>
+
+    <nav class="wheel" aria-label="Playback controls">
+      <div class="wheel__dial">
+        <button class="wheel__button wheel__button--menu" id="menuButton" data-i18n-aria-label="ariaMenu">
+          <span class="wheel__button-label">MENU</span>
+        </button>
+        <button class="wheel__button wheel__button--prev" id="previousButton" data-i18n-aria-label="ariaPrev">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18V6l-8.5 6zM12.5 12l8.5 6V6z"/></svg>
+        </button>
+        <button class="wheel__button wheel__button--next" id="nextButton" data-i18n-aria-label="ariaNext">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 6v12l8.5-6zM3 18l8.5-6L3 6z"/></svg>
+        </button>
+        <button class="wheel__button wheel__button--play" id="playButton" data-i18n-aria-label="ariaPlay">
+          <svg viewBox="0 0 34 24" aria-hidden="true"><path d="M3 5v14l11-7z"/><path d="M20 5h4v14h-4zM27 5h4v14h-4z"/></svg>
+        </button>
+        <button class="wheel__center" id="centerButton" data-i18n-aria-label="ariaCenter"></button>
+      </div>
+    </nav>
+
+    <div class="ipod__credit">powered with ai &middot; by <a class="ipod__credit-link" href="https://github.com/telufulu" target="_blank" rel="noopener">lufensia</a></div>
+  </div>
+
+  <section class="setup-panel" id="setupPanel" data-i18n-aria-label="panelHeadTitle">
+    <header class="setup-panel__header">
+      <h2 class="setup-panel__title" id="setupPanelTitle" data-i18n="panelHeadTitle"></h2>
+      <button class="setup-panel__close" id="closeSetupButton" data-i18n-aria-label="closeAriaLabel">&#10005;</button>
+    </header>
+    <div class="setup-panel__body">
+      <h1 class="setup-panel__heading" id="setupPanelHeading" data-i18n="panelMainTitle"></h1>
+      <p class="setup-panel__lead" id="setupPanelLead" data-i18n="panelLead"></p>
+
+      <div class="setup-panel__step">
+        <h3 class="setup-panel__step-title"><span class="setup-panel__step-number">1</span><span id="stepOneTitle" data-i18n="step1Title"></span></h3>
+        <ol class="setup-panel__step-list" id="stepOneList"></ol>
+      </div>
+
+      <div class="setup-panel__step">
+        <h3 class="setup-panel__step-title"><span class="setup-panel__step-number">2</span><span id="stepTwoTitle" data-i18n="step2Title"></span></h3>
+        <p id="stepTwoDescription" data-i18n-html="step2Desc"></p>
+        <div class="setup-panel__field">
+          <input id="clientIdInput" class="setup-panel__input" autocomplete="off" spellcheck="false" data-i18n-placeholder="clientIdPlaceholder">
+          <button class="setup-panel__button" id="connectButton" data-i18n="btnAuthLabel"></button>
+        </div>
+      </div>
+
+      <div class="setup-panel__step" id="setupStepThree">
+        <h3 class="setup-panel__step-title"><span class="setup-panel__step-number">3</span><span id="stepThreeTitle" data-i18n="step3Title"></span></h3>
+        <p id="stepThreeDescription" data-i18n-html="step3Desc"></p>
+        <div class="setup-panel__field">
+          <input id="redirectUrlInput" class="setup-panel__input" autocomplete="off" spellcheck="false" disabled data-i18n-placeholder="redirectPlaceholder">
+          <button class="setup-panel__button" id="finishSetupButton" disabled data-i18n="btnFinishLabel"></button>
+        </div>
+      </div>
+
+      <div class="setup-panel__error" id="setupErrorMessage"></div>
+      <p class="setup-panel__note" id="setupPanelNote" data-i18n-html="panelNote"></p>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   SECTION: Configuration constants
+   All values that can vary (storage keys, timings, skins,
+   languages, demo content) live here. Nothing below this
+   section should contain a literal "magic" value.
+   ============================================================ */
+var CONFIG = {
+  storageKeys: {
+    skin: "cs42_skin",
+    language: "cs42_lang",
+    spotifyAuth: "cs42_spotify"
+  },
+  defaults: {
+    skin: "sunset-pop",
+    language: "en"
+  },
+  spotify: {
+    redirectUri: "http://127.0.0.1:8888/callback",
+    scopes: "user-read-playback-state user-modify-playback-state user-read-currently-playing",
+    apiBaseUrl: "https://api.spotify.com/v1",
+    authBaseUrl: "https://accounts.spotify.com",
+    tokenRefreshMarginMs: 30000,
+    pollIntervalMs: 3000,
+    postCommandDelayMs: 350
+  },
+  demoTrack: {
+    title: "Longing for the Shore \u2014 Extended Mix",
+    subtitle: "Side A \u00b7 playlist",
+    counterLabel: "3 / 14",
+    durationMs: 214000,
+    startPositionMs: 83000,
+    tickIntervalMs: 1000,
+    seekStepMs: 15000
+  },
+  ui: {
+    toastDurationMs: 7000,
+    titleScrollThresholdPx: 4,
+    titleScrollBufferPx: 12
+  },
+  icons: {
+    play: "\u25b6",
+    pause: "\u2759\u2759",
+    menuGlyph: "\u2630",
+    checkmark: "\u2713",
+    chevron: "\u203a",
+    deviceSmartphone: "\uD83D\uDCF1",
+    deviceSpeaker: "\uD83D\uDD0A",
+    deviceComputer: "\uD83D\uDCBB"
+  },
+  /* Each skin can optionally declare a "decoration": inline SVG markup
+     shown in the top-right of the screen. Skins without this field simply
+     show no decoration. A single SVG-only format keeps the feature simple
+     (one content type, one render path) instead of tied to a single
+     hardcoded skin id or supporting multiple decoration formats. */
+  skins: [
+    { id: "sunset-pop", name: "Sunset Pop" },
+    { id: "riviera", name: "Riviera" },
+    { id: "gold-noir", name: "Gold Noir" },
+    { id: "classic", name: "Classic '04" },
+    {
+      id: "marvin",
+      name: "Marvin",
+      /* Simple line-art robot bust, drawn with stroke='currentColor' so it
+         is tinted by the --decoration-ink token set on this skin. */
+      decoration: "<svg viewBox='0 0 60 100' fill='none' stroke='currentColor' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><line x1='30' y1='4' x2='30' y2='13'/><circle cx='30' cy='4' r='3' fill='currentColor' stroke='none'/><rect x='13' y='13' width='34' height='25' rx='7'/><circle cx='23' cy='25.5' r='2.6' fill='currentColor' stroke='none'/><circle cx='37' cy='25.5' r='2.6' fill='currentColor' stroke='none'/><line x1='30' y1='38' x2='30' y2='45'/><rect x='9' y='45' width='42' height='44' rx='9'/><line x1='17' y1='57' x2='43' y2='57'/><rect x='19' y='65' width='22' height='15' rx='3'/></svg>"
+    },
+    { id: "steel", name: "Brushed Steel" },
+    {
+      id: "maestro",
+      name: "Maestro",
+      /* G clef ("clave de sol"): bottom hook, long stem, and top spiral,
+         drawn as a small inline SVG stroke path. Uses currentColor so it
+         is tinted by the --decoration-ink token set on this skin. */
+      decoration: "<svg viewBox='0 0 60 100' fill='none' stroke='currentColor' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'><path d='M36,98 C20,98 12,90 13,80 C14,71 24,68 29,75 C33,80 30,86 24,84 M31,82 L31,22 C31,10 20,6 18,16 C16,25 27,31 34,25 C40,20 39,10 30,7'/></svg>"
+    }
+  ],
+  languages: [
+    { id: "en", name: "English" },
+    { id: "es", name: "Espa\u00f1ol" }
+  ]
+};
+
+/* ============================================================
+   SECTION: Translation strings
+   English is the default and also the fallback for missing keys.
+   ============================================================ */
+var STRINGS = {
+  en: {
+    playing: "Now Playing", paused: "Paused", menu: "Menu",
+    artAlt: "Album art", noPlayback: "Nothing playing", noPlaybackSub: "Hit play on Spotify",
+    noDevice: "No device", demoSuffix: "\u00b7 demo mode",
+    sbDevice: "Device", sbTheme: "Theme", sbLanguage: "Language",
+    menuDevice: "Playback device", menuTheme: "Theme", menuLanguage: "Language",
+    devConnect: "Connect to Spotify", devSearching: "Searching for devices\u2026",
+    devNone: "No devices found. Open Spotify on your phone, desktop, or open.spotify.com and try again.",
+    devDisconnect: "Disconnect Spotify", devNoConn: "Not connected to Spotify. The iPod runs in demo mode in the meantime.",
+    devRetry: "Retry", devErrPrefix: "Error fetching devices: ",
+    devSending: "Sending music to ", devSendingSuffix: "\u2026",
+    ariaMenu: "Open menu or go back", ariaPrev: "Previous", ariaNext: "Next",
+    ariaPlay: "Play or pause", ariaCenter: "Select or play",
+    toastConnected: "Spotify connected \uD83C\uDF89", toastDisconnected: "Spotify disconnected.",
+    toastSessionExp: "Session expired. Please reconnect your account.",
+    toastNoDevice: "No active device. Choose one in MENU \u2192 Device.",
+    toastPremium: "Spotify only allows playback control with a Premium account.",
+    toastApiErr: "Spotify returned an error: ",
+    panelHeadTitle: "Connect your Spotify", panelMainTitle: "\uD83C\uDFA7 Connect your Spotify",
+    panelLead: "The iPod talks directly to the Spotify API from your browser. You only need to do this once: the connection is saved on this device.",
+    step1Title: "Create your app on Spotify",
+    step1Items: [
+      "Open the <a href='https://developer.spotify.com/dashboard' target='_blank' rel='noopener'>Spotify Developer Dashboard</a> and sign in.",
+      "Click <b>Create app</b>. Name and description: anything you like.",
+      "Under <b>Redirect URIs</b> add exactly: <code class='setup-panel__code'>http://127.0.0.1:8888/callback</code>",
+      "Under <b>APIs used</b> check <b>Web API</b> and save."
+    ],
+    step2Title: "Paste your Client ID", step2Desc: "You'll find it on your app page, under <b>Settings</b>.",
+    clientIdPlaceholder: "Client ID", btnAuthLabel: "Connect",
+    step3Title: "Authorize and paste the return URL",
+    step3Desc: "Spotify will open for authorization. Afterwards it will redirect to a page that <b>doesn't load</b> (that's normal): copy the full URL from the address bar (starts with <code class='setup-panel__code'>http://127.0.0.1:8888/callback?code=\u2026</code>) and paste it here.",
+    redirectPlaceholder: "http://127.0.0.1:8888/callback?code=\u2026", btnFinishLabel: "Done",
+    panelNote: "\u2139\uFE0F To control playback you need <b>Spotify Premium</b> and Spotify open on some device (mobile, desktop, or web). Your credentials are stored only in your browser.",
+    closeAriaLabel: "Close", menuAriaLabel: "iPod menu",
+    errNoClientId: "Please paste your Client ID first (step 2).", errNoUrl: "Paste the full URL Spotify redirected you to.",
+    errSpotify: "Spotify says: ", errSpotifyHint: ". Check the Redirect URI in your app and click Connect again.",
+    errNetwork: "Could not reach Spotify. Check your connection and try again."
+  },
+  es: {
+    playing: "Reproduciendo", paused: "En pausa", menu: "Men\u00fa",
+    artAlt: "Car\u00e1tula", noPlayback: "Sin reproducci\u00f3n", noPlaybackSub: "Dale al play en Spotify",
+    noDevice: "Sin dispositivo", demoSuffix: "\u00b7 modo demo",
+    sbDevice: "Dispositivo", sbTheme: "Tema", sbLanguage: "Idioma",
+    menuDevice: "Dispositivo de reproducci\u00f3n", menuTheme: "Tema", menuLanguage: "Idioma",
+    devConnect: "Con\u00e9ctate a Spotify", devSearching: "Buscando dispositivos\u2026",
+    devNone: "No hay dispositivos. Abre Spotify en tu m\u00f3vil, escritorio u open.spotify.com y vuelve a entrar.",
+    devDisconnect: "Desconectar Spotify", devNoConn: "Sin conexi\u00f3n con Spotify. Mientras tanto, el iPod funciona en modo demo.",
+    devRetry: "Reintentar", devErrPrefix: "Error al buscar dispositivos: ",
+    devSending: "Enviando la m\u00fasica a ", devSendingSuffix: "\u2026",
+    ariaMenu: "Abrir men\u00fa o volver atr\u00e1s", ariaPrev: "Anterior", ariaNext: "Siguiente",
+    ariaPlay: "Reproducir o pausar", ariaCenter: "Seleccionar o reproducir",
+    toastConnected: "Spotify conectado \uD83C\uDF89", toastDisconnected: "Spotify desconectado.",
+    toastSessionExp: "La sesi\u00f3n caduc\u00f3. Vuelve a conectar tu cuenta.",
+    toastNoDevice: "No hay ning\u00fan dispositivo activo. Elige uno en MEN\u00da \u2192 Dispositivo.",
+    toastPremium: "Spotify solo permite controlar la reproducci\u00f3n con una cuenta Premium.",
+    toastApiErr: "Spotify respondi\u00f3 con un error: ",
+    panelHeadTitle: "Conecta tu Spotify", panelMainTitle: "\uD83C\uDFA7 Conecta tu Spotify",
+    panelLead: "El iPod habla directamente con la API de Spotify desde tu navegador. Solo hay que hacerlo una vez: la conexi\u00f3n se guarda en este dispositivo.",
+    step1Title: "Crea tu app en Spotify",
+    step1Items: [
+      "Abre el <a href='https://developer.spotify.com/dashboard' target='_blank' rel='noopener'>Spotify Developer Dashboard</a> e inicia sesi\u00f3n con tu cuenta.",
+      "Pulsa <b>Create app</b>. Nombre y descripci\u00f3n: los que quieras.",
+      "En <b>Redirect URIs</b> a\u00f1ade exactamente: <code class='setup-panel__code'>http://127.0.0.1:8888/callback</code>",
+      "En <b>APIs used</b> marca <b>Web API</b> y guarda."
+    ],
+    step2Title: "Pega tu Client ID", step2Desc: "Lo encuentras en la p\u00e1gina de tu app, en <b>Settings</b>.",
+    clientIdPlaceholder: "Client ID", btnAuthLabel: "Conectar",
+    step3Title: "Autoriza y pega la URL de vuelta",
+    step3Desc: "Se abrir\u00e1 Spotify para autorizar. Despu\u00e9s te llevar\u00e1 a una p\u00e1gina que <b>no carga</b> (es normal): copia la URL completa de la barra de direcciones (empieza por <code class='setup-panel__code'>http://127.0.0.1:8888/callback?code=\u2026</code>) y p\u00e9gala aqu\u00ed.",
+    redirectPlaceholder: "http://127.0.0.1:8888/callback?code=\u2026", btnFinishLabel: "Listo",
+    panelNote: "\u2139\uFE0F Para controlar la reproducci\u00f3n necesitas <b>Spotify Premium</b> y tener Spotify abierto en alg\u00fan dispositivo (m\u00f3vil, escritorio o web). Tus credenciales se guardan solo en tu navegador.",
+    closeAriaLabel: "Cerrar", menuAriaLabel: "Men\u00fa del iPod",
+    errNoClientId: "Pega primero tu Client ID (paso 2).", errNoUrl: "Pega la URL completa a la que te redirigi\u00f3 Spotify.",
+    errSpotify: "Spotify dice: ", errSpotifyHint: ". Revisa el Redirect URI de tu app y vuelve a pulsar Conectar.",
+    errNetwork: "No se pudo contactar con Spotify. Comprueba tu conexi\u00f3n e int\u00e9ntalo de nuevo."
+  }
+};
+
+/* ============================================================
+   SECTION: Application state
+   Grouped into a single object instead of scattered globals.
+   ============================================================ */
+var state = {
+  language: CONFIG.defaults.language,
+  view: "player",
+  menuId: null,
+  menuItems: [],
+  selectedIndex: 0,
+  spotifyAuth: {},
+  lastPlaybackState: null,
+  pollTimerId: null,
+  toastTimerId: null,
+  tokenRefreshPromise: null,
+  demo: {
+    isPlaying: true,
+    positionMs: CONFIG.demoTrack.startPositionMs
+  }
+};
+
+/* ============================================================
+   SECTION: Utility functions (pure helpers)
+   ============================================================ */
+function translate(key) {
+  var activeDictionary = STRINGS[state.language] || STRINGS.en;
+  if (activeDictionary[key] !== undefined) {
+    return activeDictionary[key];
+  }
+  return STRINGS.en[key];
+}
+
+function formatDuration(milliseconds) {
+  if (milliseconds === null || milliseconds === undefined) {
+    return "--:--";
+  }
+  var totalSeconds = Math.floor(milliseconds / 1000);
+  var minutes = Math.floor(totalSeconds / 60);
+  var seconds = totalSeconds % 60;
+  var paddedSeconds = ("0" + seconds).slice(-2);
+  return minutes + ":" + paddedSeconds;
+}
+
+function readJsonFromStorage(key) {
+  try {
+    var raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeJsonToStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    /* Storage may be unavailable (private browsing); fail silently. */
+  }
+}
+
+function isKnownSkin(skinId) {
+  return CONFIG.skins.some(function (skin) { return skin.id === skinId; });
+}
+
+function getSkinConfig(skinId) {
+  return CONFIG.skins.filter(function (skin) { return skin.id === skinId; })[0] || null;
+}
+
+function isKnownLanguage(languageId) {
+  return Object.prototype.hasOwnProperty.call(STRINGS, languageId);
+}
+
+function getDeviceIcon(deviceType) {
+  if (deviceType === "Smartphone") {
+    return CONFIG.icons.deviceSmartphone;
+  }
+  if (deviceType === "Speaker") {
+    return CONFIG.icons.deviceSpeaker;
+  }
+  return CONFIG.icons.deviceComputer;
+}
+
+function pickAlbumImageUrl(item) {
+  var images = (item.album && item.album.images) || item.images || [];
+  if (images.length === 0) {
+    return getPlaceholderArtworkUrl();
+  }
+  if (images.length > 1) {
+    return images[1].url;
+  }
+  return images[0].url;
+}
+
+function getPlaceholderArtworkUrl() {
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">' +
+    '<rect width="160" height="160" fill="#413e38"/>' +
+    '<text x="80" y="92" font-size="48" text-anchor="middle" fill="#cfccc5" font-family="sans-serif">\u266a</text></svg>';
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+function generateCodeVerifier() {
+  var randomBytes = new Uint8Array(48);
+  crypto.getRandomValues(randomBytes);
+  return Array.prototype.map.call(randomBytes, function (byte) {
+    return ("0" + byte.toString(16)).slice(-2);
+  }).join("");
+}
+
+function base64UrlEncode(buffer) {
+  var binary = String.fromCharCode.apply(null, new Uint8Array(buffer));
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function computeCodeChallenge(verifier) {
+  var encodedVerifier = new TextEncoder().encode(verifier);
+  var digest = await crypto.subtle.digest("SHA-256", encodedVerifier);
+  return base64UrlEncode(digest);
+}
+
+function isSpotifyConnected() {
+  return Boolean(state.spotifyAuth.refresh);
+}
+
+/* ============================================================
+   SECTION: Builder functions (DOM construction)
+   ============================================================ */
+function clearChildren(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
+
+function createMenuItemElement(menuItem, index, isSelected) {
+  var listItem = document.createElement("li");
+  var button = document.createElement("button");
+  button.className = "menu__item" + (isSelected ? " menu__item--selected" : "");
+  button.setAttribute("role", "menuitem");
+
+  var label = document.createElement("span");
+  label.className = "menu__item-label";
+  label.textContent = menuItem.label;
+
+  var chevron = document.createElement("span");
+  chevron.className = "menu__item-chevron";
+  chevron.textContent = getMenuItemMarker(menuItem);
+
+  button.appendChild(label);
+  button.appendChild(chevron);
+  button.addEventListener("click", function () {
+    state.selectedIndex = index;
+    menuItem.onSelect();
+  });
+  listItem.appendChild(button);
+  return listItem;
+}
+
+function getMenuItemMarker(menuItem) {
+  if (menuItem.isChecked) {
+    return CONFIG.icons.checkmark;
+  }
+  if (menuItem.hasSubmenu) {
+    return CONFIG.icons.chevron;
+  }
+  return "";
+}
+
+function renderStepOneList() {
+  var list = document.getElementById("stepOneList");
+  clearChildren(list);
+  translate("step1Items").forEach(function (itemHtml) {
+    var listItem = document.createElement("li");
+    listItem.innerHTML = itemHtml;
+    list.appendChild(listItem);
+  });
+}
+
+/* ============================================================
+   SECTION: Render functions (view state → DOM)
+   ============================================================ */
+function applyStaticTextTranslations() {
+  var elements = document.querySelectorAll("[data-i18n]");
+  Array.prototype.forEach.call(elements, function (element) {
+    element.textContent = translate(element.getAttribute("data-i18n"));
+  });
+}
+
+function applyStaticHtmlTranslations() {
+  var elements = document.querySelectorAll("[data-i18n-html]");
+  Array.prototype.forEach.call(elements, function (element) {
+    element.innerHTML = translate(element.getAttribute("data-i18n-html"));
+  });
+}
+
+function applyStaticAttributeTranslations(targetAttribute, sourceDataAttribute) {
+  var selector = "[" + sourceDataAttribute + "]";
+  var elements = document.querySelectorAll(selector);
+  Array.prototype.forEach.call(elements, function (element) {
+    var key = element.getAttribute(sourceDataAttribute);
+    element.setAttribute(targetAttribute, translate(key));
+  });
+}
+
+function refreshDynamicText() {
+  if (state.view === "menu") {
+    rerenderCurrentMenu();
+  }
+  if (state.view === "player") {
+    updateStatusBarTitle(getActivePlaybackFlag());
+  }
+}
+
+function applyLanguage() {
+  applyStaticTextTranslations();
+  applyStaticHtmlTranslations();
+  applyStaticAttributeTranslations("aria-label", "data-i18n-aria-label");
+  applyStaticAttributeTranslations("placeholder", "data-i18n-placeholder");
+  applyStaticAttributeTranslations("alt", "data-i18n-alt");
+  renderStepOneList();
+  document.documentElement.lang = state.language;
+  refreshDynamicText();
+}
+
+function setLanguage(languageId) {
+  if (!isKnownLanguage(languageId)) {
+    return;
+  }
+  state.language = languageId;
+  writeJsonToStorage(CONFIG.storageKeys.language, languageId);
+  applyLanguage();
+}
+
+function setSkin(skinId) {
+  document.body.dataset.skin = skinId;
+  writeJsonToStorage(CONFIG.storageKeys.skin, skinId);
+  applyScreenDecoration(skinId);
+}
+
+function applyScreenDecoration(skinId) {
+  var skin = getSkinConfig(skinId);
+  var decorationElement = document.getElementById("screenDecoration");
+  if (skin && skin.decoration) {
+    decorationElement.innerHTML = skin.decoration;
+    decorationElement.classList.add("screen__decoration--visible");
+  } else {
+    decorationElement.innerHTML = "";
+    decorationElement.classList.remove("screen__decoration--visible");
+  }
+}
+
+function rerenderCurrentMenu() {
+  if (state.menuId === "main") {
+    openMainMenu();
+  } else if (state.menuId === "themes") {
+    openThemeMenu();
+  } else if (state.menuId === "language") {
+    openLanguageMenu();
+  }
+}
+
+function getActivePlaybackFlag() {
+  if (isSpotifyConnected()) {
+    return Boolean(state.lastPlaybackState && state.lastPlaybackState.is_playing);
+  }
+  return state.demo.isPlaying;
+}
+
+function updateStatusBarTitle(isPlaying) {
+  if (state.view !== "player") {
+    return;
+  }
+  var label = isPlaying ? translate("playing") : translate("paused");
+  document.getElementById("statusBarTitle").textContent = label;
+}
+
+function updatePlaybackIcon(isPlaying) {
+  var icon = isPlaying ? CONFIG.icons.play : CONFIG.icons.pause;
+  document.getElementById("playbackStateIcon").textContent = icon;
+}
+
+function setScrollingTitle(text) {
+  var titleElement = document.getElementById("trackTitle");
+  if (titleElement.textContent === text) {
+    return;
+  }
+  titleElement.textContent = text;
+  titleElement.classList.remove("player__title--scrolling");
+  requestAnimationFrame(function () { applyScrollIfOverflowing(titleElement); });
+}
+
+function applyScrollIfOverflowing(titleElement) {
+  var clip = titleElement.parentElement;
+  var overflow = titleElement.scrollWidth - clip.clientWidth;
+  if (overflow <= CONFIG.ui.titleScrollThresholdPx) {
+    return;
+  }
+  var shiftPx = overflow + CONFIG.ui.titleScrollBufferPx;
+  titleElement.style.setProperty("--shift", "-" + shiftPx + "px");
+  titleElement.classList.add("player__title--scrolling");
+}
+
+function showToast(message) {
+  var toastElement = document.getElementById("toast");
+  if (!message) {
+    toastElement.classList.remove("toast--visible");
+    return;
+  }
+  toastElement.textContent = message;
+  toastElement.classList.add("toast--visible");
+  clearTimeout(state.toastTimerId);
+  state.toastTimerId = setTimeout(function () {
+    toastElement.classList.remove("toast--visible");
+  }, CONFIG.ui.toastDurationMs);
+}
+
+function showPlayerView() {
+  state.view = "player";
+  state.menuId = null;
+  state.menuItems = [];
+  document.getElementById("menuView").style.display = "none";
+  document.getElementById("playerView").style.display = "";
+  var isPlaying = getActivePlaybackFlag();
+  updateStatusBarTitle(isPlaying);
+  updatePlaybackIcon(isPlaying);
+}
+
+function showMenuView(menuId, items, emptyMessage) {
+  state.view = "menu";
+  state.menuId = menuId;
+  state.menuItems = items;
+  if (state.selectedIndex >= items.length) {
+    state.selectedIndex = items.length ? items.length - 1 : 0;
+  }
+  document.getElementById("playerView").style.display = "none";
+  document.getElementById("menuView").style.display = "block";
+  document.getElementById("statusBarTitle").textContent = getMenuStatusBarLabel(menuId);
+  document.getElementById("playbackStateIcon").textContent = CONFIG.icons.menuGlyph;
+  renderMenuEmptyMessage(emptyMessage);
+  renderMenuItemList(items);
+}
+
+function getMenuStatusBarLabel(menuId) {
+  if (menuId === "devices") { return translate("sbDevice"); }
+  if (menuId === "themes") { return translate("sbTheme"); }
+  if (menuId === "language") { return translate("sbLanguage"); }
+  return translate("menu");
+}
+
+function renderMenuEmptyMessage(emptyMessage) {
+  var emptyElement = document.getElementById("menuEmptyMessage");
+  emptyElement.textContent = emptyMessage || "";
+  if (emptyMessage) {
+    emptyElement.style.display = "block";
+  } else {
+    emptyElement.style.display = "none";
+  }
+}
+
+function renderMenuItemList(items) {
+  var list = document.getElementById("menuItemList");
+  clearChildren(list);
+  items.forEach(function (menuItem, index) {
+    var isSelected = index === state.selectedIndex;
+    list.appendChild(createMenuItemElement(menuItem, index, isSelected));
+  });
+}
+
+function moveMenuSelection(direction) {
+  if (state.menuItems.length === 0) {
+    return;
+  }
+  var itemCount = state.menuItems.length;
+  state.selectedIndex = (state.selectedIndex + direction + itemCount) % itemCount;
+  renderMenuItemList(state.menuItems);
+  scrollSelectedItemIntoView();
+}
+
+function scrollSelectedItemIntoView() {
+  var items = document.querySelectorAll(".menu__item");
+  var selectedElement = items[state.selectedIndex];
+  if (selectedElement && selectedElement.scrollIntoView) {
+    selectedElement.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function renderPlaybackFromSpotify(playbackState) {
+  state.lastPlaybackState = playbackState;
+  var isPlaying = Boolean(playbackState && playbackState.is_playing);
+  updatePlaybackIcon(isPlaying);
+  updateStatusBarTitle(isPlaying);
+  if (playbackState && playbackState.item) {
+    renderTrackDetails(playbackState.item, playbackState.progress_ms);
+  } else {
+    renderEmptyPlaybackState();
+  }
+  renderDeviceCounter(playbackState);
+}
+
+function renderTrackDetails(item, progressMs) {
+  setScrollingTitle(item.name);
+  var artistNames = (item.artists || []).map(function (artist) { return artist.name; });
+  var subtitle = artistNames.join(", ") || (item.show && item.show.name) || "";
+  document.getElementById("trackSubtitle").textContent = subtitle;
+  updateAlbumArt(pickAlbumImageUrl(item));
+  updateProgress(progressMs || 0, item.duration_ms);
+}
+
+function updateAlbumArt(imageUrl) {
+  var artElement = document.getElementById("albumArt");
+  if (artElement.getAttribute("src") !== imageUrl) {
+    artElement.src = imageUrl;
+  }
+}
+
+function updateProgress(progressMs, durationMs) {
+  var percentComplete = 0;
+  if (durationMs) {
+    percentComplete = Math.min(100, (100 * progressMs) / durationMs);
+  }
+  document.getElementById("progressFill").style.width = percentComplete + "%";
+  document.getElementById("currentTimeLabel").textContent = formatDuration(progressMs);
+  document.getElementById("totalTimeLabel").textContent = formatDuration(durationMs);
+}
+
+function renderEmptyPlaybackState() {
+  setScrollingTitle(translate("noPlayback"));
+  document.getElementById("trackSubtitle").textContent = translate("noPlaybackSub");
+  updateAlbumArt(getPlaceholderArtworkUrl());
+  updateProgress(0, 0);
+}
+
+function renderDeviceCounter(playbackState) {
+  var deviceName = translate("noDevice");
+  if (playbackState && playbackState.device && playbackState.device.name) {
+    deviceName = playbackState.device.name;
+  }
+  document.getElementById("trackCounter").textContent = deviceName.toUpperCase();
+}
+
+function renderDemoPlayer() {
+  if (isSpotifyConnected()) {
+    return;
+  }
+  updatePlaybackIcon(state.demo.isPlaying);
+  updateStatusBarTitle(state.demo.isPlaying);
+  updateProgress(state.demo.positionMs, CONFIG.demoTrack.durationMs);
+}
+
+function renderDemoPlayerFull() {
+  if (isSpotifyConnected()) {
+    return;
+  }
+  setScrollingTitle(CONFIG.demoTrack.title);
+  document.getElementById("trackSubtitle").textContent = CONFIG.demoTrack.subtitle;
+  document.getElementById("trackCounter").textContent = CONFIG.demoTrack.counterLabel + " " + translate("demoSuffix");
+  updateAlbumArt(getPlaceholderArtworkUrl());
+  renderDemoPlayer();
+}
+
+/* ============================================================
+   SECTION: Menu content builders
+   ============================================================ */
+function openMainMenu() {
+  state.selectedIndex = 0;
+  showMenuMainItems();
+}
+
+function showMenuMainItems() {
+  showMenuView("main", [
+    { label: translate("menuDevice"), hasSubmenu: true, onSelect: function () { state.selectedIndex = 0; openDeviceMenu(); } },
+    { label: translate("menuTheme"), hasSubmenu: true, onSelect: function () { state.selectedIndex = 0; openThemeMenu(); } },
+    { label: translate("menuLanguage"), hasSubmenu: true, onSelect: function () { state.selectedIndex = 0; openLanguageMenu(); } }
+  ]);
+}
+
+function openThemeMenu() {
+  var items = CONFIG.skins.map(function (skin) {
+    return {
+      label: skin.name,
+      isChecked: document.body.dataset.skin === skin.id,
+      onSelect: function () { setSkin(skin.id); openThemeMenu(); }
+    };
+  });
+  showMenuView("themes", items);
+}
+
+function openLanguageMenu() {
+  var items = CONFIG.languages.map(function (language) {
+    return {
+      label: language.name,
+      isChecked: state.language === language.id,
+      onSelect: function () { setLanguage(language.id); }
+    };
+  });
+  showMenuView("language", items);
+}
+
+async function openDeviceMenu() {
+  if (!isSpotifyConnected()) {
+    showMenuView("devices", [{ label: translate("devConnect"), hasSubmenu: true, onSelect: openSpotifySetup }], translate("devNoConn"));
+    return;
+  }
+  showMenuView("devices", [], translate("devSearching"));
+  await loadAndRenderDeviceList();
+}
+
+async function loadAndRenderDeviceList() {
+  try {
+    var response = await callSpotifyApi("/me/player/devices");
+    if (state.view !== "menu" || state.menuId !== "devices") {
+      return;
+    }
+    var devices = (response && response.devices) || [];
+    var items = buildDeviceMenuItems(devices);
+    items.push({ label: translate("devDisconnect"), onSelect: handleDisconnectFromDeviceMenu });
+    var emptyMessage = devices.length ? "" : translate("devNone");
+    showMenuView("devices", items, emptyMessage);
+  } catch (error) {
+    handleDeviceListError(error);
+  }
+}
+
+function buildDeviceMenuItems(devices) {
+  return devices.map(function (device) {
+    return {
+      label: getDeviceIcon(device.type) + " " + device.name,
+      isChecked: device.is_active,
+      onSelect: function () { selectPlaybackDevice(device); }
+    };
+  });
+}
+
+function selectPlaybackDevice(device) {
+  showPlayerView();
+  showToast(translate("devSending") + device.name + translate("devSendingSuffix"));
+  runSpotifyCommand(function () {
+    return callSpotifyApi("/me/player", "PUT", { device_ids: [device.id], play: true });
+  });
+}
+
+function handleDisconnectFromDeviceMenu() {
+  disconnectSpotify(translate("toastDisconnected"));
+  state.selectedIndex = 0;
+  openDeviceMenu();
+}
+
+function handleDeviceListError(error) {
+  if (state.view !== "menu" || state.menuId !== "devices") {
+    return;
+  }
+  var items = [{ label: translate("devRetry"), onSelect: openDeviceMenu }];
+  showMenuView("devices", items, translate("devErrPrefix") + error.message);
+}
+
+function openSpotifySetup() {
+  document.getElementById("setupPanel").classList.add("setup-panel--open");
+}
+
+function closeSpotifySetup() {
+  document.getElementById("setupPanel").classList.remove("setup-panel--open");
+}
+
+/* ============================================================
+   SECTION: Spotify authentication (PKCE) and Web API
+   ============================================================ */
+function showSetupError(message) {
+  var errorElement = document.getElementById("setupErrorMessage");
+  errorElement.textContent = message;
+  errorElement.classList.add("setup-panel__error--visible");
+}
+
+function clearSetupError() {
+  document.getElementById("setupErrorMessage").classList.remove("setup-panel__error--visible");
+}
+
+async function startSpotifyAuthorization() {
+  var clientId = document.getElementById("clientIdInput").value.trim();
+  if (!clientId) {
+    showSetupError(translate("errNoClientId"));
+    return;
+  }
+  clearSetupError();
+  state.spotifyAuth.clientId = clientId;
+  state.spotifyAuth.verifier = generateCodeVerifier();
+  writeJsonToStorage(CONFIG.storageKeys.spotifyAuth, state.spotifyAuth);
+  var challenge = await computeCodeChallenge(state.spotifyAuth.verifier);
+  openSpotifyAuthorizeWindow(clientId, challenge);
+  enableRedirectStep();
+}
+
+function openSpotifyAuthorizeWindow(clientId, challenge) {
+  var params = new URLSearchParams({
+    client_id: clientId, response_type: "code", redirect_uri: CONFIG.spotify.redirectUri,
+    scope: CONFIG.spotify.scopes, code_challenge_method: "S256", code_challenge: challenge
+  });
+  window.open(CONFIG.spotify.authBaseUrl + "/authorize?" + params.toString(), "_blank", "noopener");
+}
+
+function enableRedirectStep() {
+  document.getElementById("setupStepThree").style.opacity = "1";
+  document.getElementById("redirectUrlInput").disabled = false;
+  document.getElementById("finishSetupButton").disabled = false;
+  document.getElementById("redirectUrlInput").focus();
+}
+
+async function completeSpotifyAuthorization() {
+  var redirectUrl = document.getElementById("redirectUrlInput").value.trim();
+  if (!redirectUrl) {
+    showSetupError(translate("errNoUrl"));
+    return;
+  }
+  var authorizationCode = extractAuthorizationCode(redirectUrl);
+  try {
+    await exchangeAuthorizationCode(authorizationCode);
+  } catch (error) {
+    showSetupError(translate("errNetwork"));
+  }
+}
+
+function extractAuthorizationCode(redirectUrl) {
+  try {
+    var parsedUrl = new URL(redirectUrl);
+    return parsedUrl.searchParams.get("code") || redirectUrl;
+  } catch (error) {
+    return redirectUrl;
+  }
+}
+
+async function exchangeAuthorizationCode(authorizationCode) {
+  var response = await fetch(CONFIG.spotify.authBaseUrl + "/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code", code: authorizationCode,
+      redirect_uri: CONFIG.spotify.redirectUri, client_id: state.spotifyAuth.clientId,
+      code_verifier: state.spotifyAuth.verifier
+    })
+  });
+  var data = await response.json();
+  if (data.error) {
+    showSetupError(translate("errSpotify") + (data.error_description || data.error) + translate("errSpotifyHint"));
+    return;
+  }
+  applyTokens(data);
+  closeSpotifySetup();
+  startPlaybackPolling();
+  showPlayerView();
+  showToast(translate("toastConnected"));
+}
+
+function applyTokens(tokenResponse) {
+  state.spotifyAuth.access = tokenResponse.access_token;
+  if (tokenResponse.refresh_token) {
+    state.spotifyAuth.refresh = tokenResponse.refresh_token;
+  }
+  var expiresInMs = (tokenResponse.expires_in || 3600) * 1000;
+  state.spotifyAuth.expires = Date.now() + expiresInMs;
+  writeJsonToStorage(CONFIG.storageKeys.spotifyAuth, state.spotifyAuth);
+}
+
+async function refreshAccessToken() {
+  if (state.tokenRefreshPromise) {
+    return state.tokenRefreshPromise;
+  }
+  state.tokenRefreshPromise = requestTokenRefresh();
+  try {
+    await state.tokenRefreshPromise;
+  } finally {
+    state.tokenRefreshPromise = null;
+  }
+}
+
+async function requestTokenRefresh() {
+  var response = await fetch(CONFIG.spotify.authBaseUrl + "/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token", refresh_token: state.spotifyAuth.refresh, client_id: state.spotifyAuth.clientId
+    })
+  });
+  var data = await response.json();
+  if (data.error) {
+    disconnectSpotify(translate("toastSessionExp"));
+    throw data;
+  }
+  applyTokens(data);
+}
+
+function disconnectSpotify(message) {
+  clearInterval(state.pollTimerId);
+  state.pollTimerId = null;
+  delete state.spotifyAuth.access;
+  delete state.spotifyAuth.refresh;
+  delete state.spotifyAuth.expires;
+  writeJsonToStorage(CONFIG.storageKeys.spotifyAuth, state.spotifyAuth);
+  state.lastPlaybackState = null;
+  renderDemoPlayerFull();
+  if (message) {
+    showToast(message);
+  }
+}
+
+async function callSpotifyApi(path, method, body, isRetry) {
+  await refreshTokenIfExpiring();
+  var response = await fetch(CONFIG.spotify.apiBaseUrl + path, buildApiRequestOptions(method, body));
+  if (response.status === 204) {
+    return null;
+  }
+  if (response.status === 401 && !isRetry && state.spotifyAuth.refresh) {
+    await refreshAccessToken();
+    return callSpotifyApi(path, method, body, true);
+  }
+  return parseApiResponse(response);
+}
+
+function buildApiRequestOptions(method, body) {
+  var options = {
+    method: method || "GET",
+    headers: { Authorization: "Bearer " + state.spotifyAuth.access }
+  };
+  if (body) {
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
+  }
+  return options;
+}
+
+async function parseApiResponse(response) {
+  var rawText = await response.text();
+  var data = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch (error) {
+    data = null;
+  }
+  if (!response.ok) {
+    throw buildApiError(response, data);
+  }
+  return data;
+}
+
+function buildApiError(response, data) {
+  var message = (data && data.error && data.error.message) || ("HTTP " + response.status);
+  var error = new Error(message);
+  error.status = response.status;
+  error.reason = data && data.error && data.error.reason;
+  return error;
+}
+
+async function refreshTokenIfExpiring() {
+  if (!state.spotifyAuth.refresh) {
+    return;
+  }
+  var expiresAt = state.spotifyAuth.expires || 0;
+  var isExpiringSoon = Date.now() > expiresAt - CONFIG.spotify.tokenRefreshMarginMs;
+  if (isExpiringSoon) {
+    await refreshAccessToken();
+  }
+}
+
+function handleSpotifyApiError(error) {
+  if (error.status === 404 || error.reason === "NO_ACTIVE_DEVICE") {
+    showToast(translate("toastNoDevice"));
+  } else if (error.status === 403) {
+    showToast(translate("toastPremium"));
+  } else {
+    showToast(translate("toastApiErr") + error.message);
+  }
+}
+
+async function fetchCurrentPlayback() {
+  if (document.hidden || !isSpotifyConnected()) {
+    return;
+  }
+  try {
+    var playbackState = await callSpotifyApi("/me/player");
+    renderPlaybackFromSpotify(playbackState);
+  } catch (error) {
+    /* Silent polling errors avoid spamming toasts every 3 seconds. */
+  }
+}
+
+function startPlaybackPolling() {
+  renderPlaybackFromSpotify(null);
+  fetchCurrentPlayback();
+  clearInterval(state.pollTimerId);
+  state.pollTimerId = setInterval(fetchCurrentPlayback, CONFIG.spotify.pollIntervalMs);
+}
+
+async function runSpotifyCommand(requestFn) {
+  try {
+    await requestFn();
+    setTimeout(fetchCurrentPlayback, CONFIG.spotify.postCommandDelayMs);
+  } catch (error) {
+    handleSpotifyApiError(error);
+  }
+}
+
+function togglePlayback() {
+  if (isSpotifyConnected()) {
+    togglePlaybackViaSpotify();
+  } else {
+    toggleDemoPlayback();
+  }
+}
+
+function togglePlaybackViaSpotify() {
+  var isCurrentlyPlaying = Boolean(state.lastPlaybackState && state.lastPlaybackState.is_playing);
+  runSpotifyCommand(function () {
+    if (isCurrentlyPlaying) {
+      return callSpotifyApi("/me/player/pause", "PUT");
+    }
+    return callSpotifyApi("/me/player/play", "PUT");
+  });
+}
+
+function toggleDemoPlayback() {
+  state.demo.isPlaying = !state.demo.isPlaying;
+  renderDemoPlayer();
+}
+
+function seekDemoPlayback(offsetMs) {
+  var newPosition = state.demo.positionMs + offsetMs;
+  var clampedMax = CONFIG.demoTrack.durationMs - 1000;
+  if (newPosition < 0) {
+    newPosition = 0;
+  } else if (newPosition > clampedMax) {
+    newPosition = clampedMax;
+  }
+  state.demo.positionMs = newPosition;
+  renderDemoPlayer();
+}
+
+function advanceDemoPlaybackTick() {
+  if (isSpotifyConnected() || !state.demo.isPlaying) {
+    return;
+  }
+  state.demo.positionMs += CONFIG.demoTrack.tickIntervalMs;
+  if (state.demo.positionMs >= CONFIG.demoTrack.durationMs) {
+    state.demo.positionMs = 0;
+  }
+  renderDemoPlayer();
+}
+
+/* ============================================================
+   SECTION: Event handlers
+   ============================================================ */
+function handleMenuButtonClick() {
+  if (state.view === "player") {
+    state.selectedIndex = 0;
+    showMenuMainItems();
+    return;
+  }
+  if (state.menuId === "main") {
+    showPlayerView();
+    return;
+  }
+  state.selectedIndex = 0;
+  showMenuMainItems();
+}
+
+function handlePreviousButtonClick() {
+  if (state.view === "menu") {
+    moveMenuSelection(-1);
+    return;
+  }
+  if (isSpotifyConnected()) {
+    runSpotifyCommand(function () { return callSpotifyApi("/me/player/previous", "POST"); });
+  } else {
+    seekDemoPlayback(-CONFIG.demoTrack.seekStepMs);
+  }
+}
+
+function handleNextButtonClick() {
+  if (state.view === "menu") {
+    moveMenuSelection(1);
+    return;
+  }
+  if (isSpotifyConnected()) {
+    runSpotifyCommand(function () { return callSpotifyApi("/me/player/next", "POST"); });
+  } else {
+    seekDemoPlayback(CONFIG.demoTrack.seekStepMs);
+  }
+}
+
+function handleCenterButtonClick() {
+  if (state.view === "menu") {
+    var selectedItem = state.menuItems[state.selectedIndex];
+    if (selectedItem) {
+      selectedItem.onSelect();
+    }
+    return;
+  }
+  togglePlayback();
+}
+
+function handleRedirectInputKeydown(event) {
+  if (event.key === "Enter") {
+    completeSpotifyAuthorization();
+  }
+}
+
+function registerEventHandlers() {
+  document.getElementById("menuButton").addEventListener("click", handleMenuButtonClick);
+  document.getElementById("previousButton").addEventListener("click", handlePreviousButtonClick);
+  document.getElementById("nextButton").addEventListener("click", handleNextButtonClick);
+  document.getElementById("centerButton").addEventListener("click", handleCenterButtonClick);
+  document.getElementById("playButton").addEventListener("click", togglePlayback);
+  document.getElementById("closeSetupButton").addEventListener("click", closeSpotifySetup);
+  document.getElementById("connectButton").addEventListener("click", startSpotifyAuthorization);
+  document.getElementById("finishSetupButton").addEventListener("click", completeSpotifyAuthorization);
+  document.getElementById("redirectUrlInput").addEventListener("keydown", handleRedirectInputKeydown);
+}
+
+/* ============================================================
+   SECTION: Initialization
+   ============================================================ */
+function loadPersistedSkin() {
+  var savedSkin = null;
+  try {
+    savedSkin = localStorage.getItem(CONFIG.storageKeys.skin);
+  } catch (error) {
+    savedSkin = null;
+  }
+  var skinToApply = CONFIG.defaults.skin;
+  if (savedSkin && isKnownSkin(savedSkin)) {
+    skinToApply = savedSkin;
+  }
+  setSkin(skinToApply);
+}
+
+function loadPersistedLanguage() {
+  var savedLanguage = null;
+  try {
+    savedLanguage = localStorage.getItem(CONFIG.storageKeys.language);
+  } catch (error) {
+    savedLanguage = null;
+  }
+  if (savedLanguage && isKnownLanguage(savedLanguage)) {
+    state.language = savedLanguage;
+  }
+}
+
+function loadPersistedSpotifyAuth() {
+  var savedAuth = readJsonFromStorage(CONFIG.storageKeys.spotifyAuth);
+  state.spotifyAuth = savedAuth || {};
+}
+
+function applyTestShortcutsFromQueryString() {
+  var params = new URLSearchParams(location.search);
+  if (params.get("skin")) {
+    setSkin(params.get("skin"));
+  }
+  if (params.get("lang")) {
+    setLanguage(params.get("lang"));
+  }
+  applyBootShortcut(params.get("boot"));
+}
+
+function applyBootShortcut(bootTarget) {
+  if (bootTarget === "menu") {
+    showMenuMainItems();
+  } else if (bootTarget === "themes") {
+    showMenuMainItems();
+    openThemeMenu();
+  } else if (bootTarget === "devices") {
+    showMenuMainItems();
+    openDeviceMenu();
+  } else if (bootTarget === "language") {
+    showMenuMainItems();
+    openLanguageMenu();
+  } else if (bootTarget === "setup") {
+    openSpotifySetup();
+  }
+}
+
+function init() {
+  loadPersistedSkin();
+  loadPersistedLanguage();
+  loadPersistedSpotifyAuth();
+  applyLanguage();
+  registerEventHandlers();
+  renderDemoPlayerFull();
+  setInterval(advanceDemoPlaybackTick, CONFIG.demoTrack.tickIntervalMs);
+  if (isSpotifyConnected()) {
+    startPlaybackPolling();
+  }
+  applyTestShortcutsFromQueryString();
+}
+
+init();
+</script>
+</body>
+</html>
