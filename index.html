@@ -27,7 +27,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>iPod · CS-42</title>
+<title>LufuSound</title>
 <style>
 
 /* ============================================================
@@ -452,19 +452,35 @@ body{
   .wheel__button-label{font-size:8px}
   .ipod__credit{font-size:8px;letter-spacing:.1em}
 }
+/* Full-screen phone usage (tall viewport, unlike a small Notion embed):
+fill the full device height. The screen area stretches to absorb the
+extra height while the click wheel and credit line keep their natural
+size, instead of scaling the whole card (and the wheel) uniformly. */
 @media (max-width:600px) and (min-height:600px){
-  body{padding:0}
-  .ipod-widget{max-width:none;width:100vw}
-  .ipod{
-    width:min(100vw, 480px);
-    height:100vh;
-    margin:0 auto;
-    display:flex;
-    flex-direction:column;
-  }
-  .screen{flex:1;display:flex;flex-direction:column;min-height:0}
-  .screen__display{flex:1;display:flex;flex-direction:column;min-height:0}
-  .screen__body{flex:1;height:auto;min-height:0}
+body{padding:0}
+.ipod-widget{max-width:none;width:100vw}
+.ipod{
+ width:min(100vw, 480px);
+ height:100vh;
+ margin:0 auto;
+ display:flex;
+ flex-direction:column;
+}
+/* Screen:wheel space is split 2:1, so the wheel always keeps at least
+  a third of the ipod's height instead of shrinking to its old fixed
+  140px size while the screen keeps growing. */
+.screen{flex:2;display:flex;flex-direction:column;min-height:0}
+.screen__display{flex:1;display:flex;flex-direction:column;min-height:0}
+.screen__body{flex:1;height:auto;min-height:0}
+.wheel{flex:1;align-items:center;margin-top:0;min-height:0}
+.wheel__dial{width:auto;height:min(80%, 240px);aspect-ratio:1}
+/* On a large stretched screen, show the album art bigger and above
+  the track info instead of the small side-by-side layout. */
+.player{justify-content:flex-start;padding-top:28px}
+.player__now-playing{flex-direction:column;align-items:center;text-align:center;gap:16px;padding:0 20px}
+.player__art-frame{width:min(55vw, 260px);height:min(55vw, 260px)}
+.player__track{width:100%}
+.player__title-clip{display:flex;justify-content:center}
 }
 </style>
 </head>
